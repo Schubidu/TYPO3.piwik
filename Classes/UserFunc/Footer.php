@@ -23,34 +23,34 @@
 ***************************************************************/
 /**
  * Based on B-Net1 Piwik plugin implementation, old piwik plugin and piwik2a
- * Provides Interface to get the new piwiktrackingcode 
- * 
+ * Provides Interface to get the new piwiktrackingcode
+ *
  * Hooks for the 'piwik' extension.
  *
  * @author	Ulrich Wuensche <wuensche@drwuensche.de>
  * @author	Joerg Winter <winter@b-net1.de>
- * @author  Kay Strobach <typo3@kay-strobach.de> 
+ * @author  Kay Strobach <typo3@kay-strobach.de>
  */
 class tx_Piwik_UserFunc_Footer {
 	var $cObj;
 	private $tc = array();
 	/**
 	 * write piwik javascript right before </body> tag
-	 * JS Documentation on http://piwik.org/docs/javascript-tracking/	 
-	 * 
+	 * JS Documentation on http://piwik.org/docs/javascript-tracking/
+	 *
 	 * Idea piwikTracker.setDownloadClasses( "download" ); should be set to the default download class of TYPO3
-	 * Idea Track TYPO3 404 Errors ... http://piwik.org/faq/how-to/#faq_60	 
-	 *	 	 	 
+	 * Idea Track TYPO3 404 Errors ... http://piwik.org/faq/how-to/#faq_60
+	 *
 	 *
 	 * @param	array		$$params: has the typoscript params
-	 * @param	reference   $reference: 
+	 * @param	reference   $reference:
 	 * @return	nil		...
 	 */
 	function contentPostProc_output($content, $conf){
 		// process the page with these options
 		$conf		 = $GLOBALS['TSFE']->tmpl->setup['config.']['tx_piwik.'];
 		$beUserLogin = $GLOBALS['TSFE']->beUserLogin;
-		
+
 		//check wether there is a BE User loggged in, if yes avoid to display the tracking code!
 		//check wether needed parameters are set properly
 		if ((!$conf['piwik_idsite']) || (!$conf['piwik_host'])) {
@@ -67,10 +67,10 @@ class tx_Piwik_UserFunc_Footer {
 			//fetch the js template file, makes editing easier ;)
 			$template = t3lib_div::getURL(t3lib_extMgm::extPath('piwik').'Resources/Private/Templates/Piwik/tracker.html');
 		}
-		
+
 		//make options accessable in the whole class
 		$this->piwikOptions = $conf;
-		
+
 		//build trackingCode
 		$trackingCode .= $this->getPiwikEnableLinkTracking();
 		$trackingCode .= $this->getPiwikDomains();
@@ -82,18 +82,23 @@ class tx_Piwik_UserFunc_Footer {
 		$trackingCode .= $this->getPiwikSetIgnoreClasses();
 		$trackingCode .= $this->getPiwikSetDownloadClasses();
 		$trackingCode .= $this->getPiwikSetLinkClasses();
-        $trackingCode .= "\t\t".'piwikTracker.trackPageView();';
-		
+		$trackingCode .= $this->getPiwikSetCustomVariable();
+		$trackingCode .= $this->getPiwikSetVisitorCookieTimeout();
+        if($conf['piwik_isSearchResult']){
+            $trackingCode .= $this->getPiwikTrackSiteSearch();
+        } else {
+            $trackingCode .= "\t\t".'piwikTracker.trackPageView();';
+        }
 		//replace placeholders
 		//currently the function $this->getPiwikHost() is not called, because of piwikintegration?!
 		$template = str_replace('###TRACKEROPTIONS###',$trackingCode        ,$template);
 		$template = str_replace('###HOST###'          ,$conf['piwik_host']  ,$template);
 		$template = str_replace('###IDSITE###'        ,$conf['piwik_idsite'],$template);
 		$template = str_replace('###BEUSER###'        ,$beUserLogin         ,$template);
-		
+
 		//add complete piwikcode to frontend
 		#$params['pObj']->content = str_replace('</body>', $template.'</body>', $content);
-		return $template; 
+		return $template;
 	}
 
 	/**
@@ -256,6 +261,55 @@ class tx_Piwik_UserFunc_Footer {
 		}
 		return $scheme.$this->piwikOptions['piwik_host'];
 	}
+
+	/**
+	 * Gets Piwik setCustomVariable
+	 * @see http://piwik.org/docs/custom-variables/#toc-track-a-custom-variable-in-javascript
+	 * @return	string        setCustomVariable
+	 */
+    function getPiwikSetCustomVariable()
+    {
+        if (strlen($this->piwikOptions['setCustomVariable'])) {
+            $values = explode(',', $this->piwikOptions['setCustomVariable']);
+            return 'piwikTracker.setCustomVariable("' . implode('", "', $values) . '");' . "\n";
+        }
+        return '';
+    }
+
+	/**
+	 * Gets Piwik setVisitorCookieTimeout
+	 * @see http://piwik.org/docs/javascript-tracking/#toc-list-of-all-methods-available-in-the-tracking-api
+	 * @return	string        setVisitorCookieTimeout
+	 */
+    function getPiwikSetVisitorCookieTimeout()
+    {
+        if (strlen($this->piwikOptions['setVisitorCookieTimeout'])) {
+            return 'piwikTracker.setVisitorCookieTimeout(' . $this->piwikOptions['setVisitorCookieTimeout'] . ');' . "\n";
+        }
+        return '';
+    }
+
+    /**
+	 * Gets Piwik trackSiteSearch for indexedsearch-result page
+	 * JS-Code need jQuery >=1.7
+     * @see http://piwik.org/docs/site-search/
+	 * @return	string        trackSiteSearch
+	 */
+    function getPiwikTrackSiteSearch()
+    {
+        $js = '(function($){
+            var keywords = (function(){
+            var kws = [];
+            $(".tx-indexedsearch-whatis .tx-indexedsearch-sw").each(function(){
+                kws.push($(this).text());
+            });
+            return kws.join(" ");
+        })();
+          var searchLength = $(".tx-indexedsearch-browsebox p:first strong:last").text();
+         piwikTracker.trackSiteSearch(keywords, "", searchLength);
+         })(jQuery);';
+        return $js;
+    }
 
 }
 
